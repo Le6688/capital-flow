@@ -388,7 +388,7 @@ let lastUpdate = null;
 const API_BASE = 'https://stock-flow-indol.vercel.app/api/flow';
 
 // ===== 浏览器端缓存（减少请求，防止限流）=====
-const CLIENT_CACHE_TTL = 300000; // 5分钟
+const CLIENT_CACHE_TTL = 1800000; // 30分钟
 function getCache(key) {
   try {
     const item = JSON.parse(localStorage.getItem('flow_' + key));
