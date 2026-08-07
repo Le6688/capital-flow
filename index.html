@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>主力资金探测器</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --red: #e83939;
+      --green: #1db954;
+      --bg: #0d1117;
+      --card: #161b22;
+      --border: #21262d;
+      --text: #c9d1d9;
+      --sub: #8b949e;
+      --accent: #ffa500;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
+      padding-bottom: 20px;
+    }
+
+    /* ===== 头部 ===== */
+    .header {
+      background: linear-gradient(180deg, #1a2332 0%, #0d1117 100%);
+      padding: 16px 16px 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--border);
+    }
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .header-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .market-status {
+      font-size: 0.7rem;
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .status-open { background: var(--red); color: #fff; animation: pulse 2s infinite; }
+    .status-close { background: #30363d; color: #8b949e; }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%     { opacity: 0.7; }
+    }
+    .refresh-btn {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 12px;
+      border-radius: 15px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .refresh-btn:active { background: rgba(255,255,255,0.15); }
+    .refresh-btn.spinning .refresh-icon { animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ===== 大盘概览卡片 ===== */
+    .overview {
+      display: flex;
+      gap: 10px;
+      padding: 12px 16px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .overview::-webkit-scrollbar { display: none; }
+    .ov-card {
+      flex: 0 0 auto;
+      min-width: 130px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      text-align: center;
+    }
+    .ov-label { font-size: 0.7rem; color: var(--sub); margin-bottom: 4px; }
+    .ov-value { font-size: 1.3rem; font-weight: 700; }
+    .ov-sub   { font-size: 0.7rem; color: var(--sub); margin-top: 2px; }
+
+    /* ===== Tab 切换 ===== */
+    .tabs {
+      display: flex;
+      margin: 0 16px;
+      background: var(--card);
+      border-radius: 10px;
+      padding: 3px;
+      border: 1px solid var(--border);
+    }
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      color: var(--sub);
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+    .tab.active {
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* ===== 排序栏 ===== */
+    .sort-bar {
+      display: flex;
+      padding: 10px 16px;
+      font-size: 0.72rem;
+      color: var(--sub);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .sort-bar span:nth-child(1) { flex: 1; }
+    .sort-bar span:nth-child(2) { width: 55px; text-align: right; }
+    .sort-bar span:nth-child(3) { width: 75px; text-align: right; }
+    .sort-bar span:nth-child(4) { width: 70px; text-align: right; }
+
+    /* ===== 列表 ===== */
+    .list-container { padding: 0 16px; }
+    .list-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .list-item:active { background: rgba(255,255,255,0.03); margin: 0 -16px; padding: 12px 16px; }
+    .item-rank {
+      width: 22px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-align: center;
+      margin-right: 8px;
+      color: var(--sub);
+    }
+    .rank-1 { color: #ff4444; }
+    .rank-2 { color: #ff6b35; }
+    .rank-3 { color: #ffa500; }
+
+    .item-info { flex: 1; min-width: 0; }
+    .item-name {
+      font-size: 0.9rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .item-code {
+      font-size: 0.68rem;
+      color: var(--sub);
+      margin-top: 1px;
+    }
+
+    .item-pct {
+      width: 55px;
+      text-align: right;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .item-main {
+      width: 75px;
+      text-align: right;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .item-detail {
+      width: 70px;
+      text-align: right;
+      font-size: 0.68rem;
+      color: var(--sub);
+    }
+
+    .up   { color: var(--red); }
+    .down { color: var(--green); }
+
+    /* ===== 搜索栏 ===== */
+    .search-wrap {
+      margin: 10px 16px;
+      position: relative;
+    }
+    .search-input {
+      width: 100%;
+      padding: 10px 36px 10px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: #fff;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--accent); }
+    .search-input::placeholder { color: #454d56; }
+    .search-clear {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--sub);
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: none;
+    }
+
+    /* ===== 详情弹窗 ===== */
+    .overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      display: flex;
+      align-items: flex-end;
+      animation: fadeIn 0.25s;
+    }
+    .overlay.hidden { display: none; }
+    .sheet {
+      background: var(--card);
+      border-radius: 20px 20px 0 0;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 20px 16px 30px;
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to   { transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .sheet-handle {
+      width: 36px; height: 4px;
+      background: #30363d;
+      border-radius: 2px;
+      margin: 0 auto 16px;
+    }
+    .sheet-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .sheet-code {
+      font-size: 0.75rem;
+      color: var(--sub);
+      margin-bottom: 16px;
+    }
+    .flow-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .flow-item {
+      background: rgba(255,255,255,0.03);
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+    }
+    .flow-item.full { grid-column: 1 / -1; }
+    .flow-label { font-size: 0.72rem; color: var(--sub); margin-bottom: 4px; }
+    .flow-value { font-size: 1.05rem; font-weight: 700; }
+
+    /* ===== 加载与空状态 ===== */
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--sub);
+    }
+    .loading .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--sub);
+      font-size: 0.85rem;
+    }
+    .error-msg {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--red);
+      font-size: 0.85rem;
+    }
+
+    /* 更新时间 */
+    .update-time {
+      text-align: center;
+      padding: 16px;
+      font-size: 0.7rem;
+      color: var(--sub);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 头部 -->
+  <div class="header">
+    <div class="header-top">
+      <div class="header-title">🔍 主力资金探测器</div>
+      <button class="refresh-btn" id="refreshBtn" onclick="refreshAll()">
+        <span class="refresh-icon">🔄</span> 刷新
+      </button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="market-status" id="marketStatus">--</span>
+      <span style="font-size:0.7rem;color:var(--sub);" id="updateLabel"></span>
+    </div>
+  </div>
+
+  <!-- 大盘概览 -->
+  <div class="overview" id="overview"></div>
+
+  <!-- Tab -->
+  <div class="tabs">
+    <div class="tab active" data-tab="sector" onclick="switchTab('sector')">📊 板块资金</div>
+    <div class="tab" data-tab="stock" onclick="switchTab('stock')">📈 个股资金</div>
+  </div>
+
+  <!-- 排序栏 -->
+  <div class="sort-bar">
+    <span>名称</span>
+    <span>涨跌</span>
+    <span>主力净流入</span>
+    <span>超大单</span>
+  </div>
+
+  <!-- 搜索（个股模式下显示） -->
+  <div class="search-wrap hidden" id="searchWrap">
+    <input class="search-input" id="searchInput" placeholder="输入股票名称或代码搜索..." oninput="onSearch()">
+    <button class="search-clear" id="searchClear" onclick="clearSearch()">✕</button>
+  </div>
+
+  <!-- 列表 -->
+  <div class="list-container" id="listContainer">
+    <div class="loading"><div class="spinner"></div>加载中...</div>
+  </div>
+
+  <!-- 更新时间 -->
+  <div class="update-time" id="updateTime"></div>
+
+  <!-- 详情弹窗 -->
+  <div class="overlay hidden" id="detailOverlay" onclick="if(event.target===this)closeDetail()">
+    <div class="sheet" id="detailSheet"></div>
+  </div>
+
+<script>
+// ===== 状态 =====
+let currentTab = 'sector';
+let sectorData = [];
+let stockData = [];
+let searchResults = [];
+let lastUpdate = null;
+
+// ===== API 常量 =====
+// Vercel 代理地址（已配置 CORS，GitHub Pages 也能跨域调用）
+const API_BASE = 'https://stock-flow-indol.vercel.app/api/flow';
+
+// 字段映射
+// f2=现价 f3=涨跌幅 f12=代码 f14=名称
+// f62=主力净流入 f66=超大单净流入 f69=大单净流入
+// f72=中单净流入 f75=小单净流入 f78=中户净流入 f81=散户净流入
+// f184=主力净流入占比
+const FIELDS = 'f2,f3,f12,f14,f62,f66,f69,f72,f75,f184';
+
+// ===== 市场状态 =====
+function getMarketStatus() {
+  const now = new Date();
+  const h = now.getHours(), m = now.getMinutes();
+  const day = now.getDay();
+  if (day === 0 || day === 6) return { open: false, label: '周末休市' };
+  const minutes = h * 60 + m;
+  if (minutes >= 570 && minutes < 690) return { open: true, label: '交易中' };      // 9:30-11:30
+  if (minutes >= 780 && minutes < 900) return { open: true, label: '交易中' };       // 13:00-15:00
+  if (minutes >= 540 && minutes < 570) return { open: false, label: '集合竞价' };    // 9:00-9:30
+  if (minutes >= 690 && minutes < 780) return { open: false, label: '午间休市' };    // 11:30-13:00
+  if (minutes >= 900 && minutes < 920) return { open: false, label: '收盘' };        // 15:00-15:20
+  return { open: false, label: '已收盘' };
+}
+
+function updateMarketStatus() {
+  const status = getMarketStatus();
+  const el = document.getElementById('marketStatus');
+  el.textContent = status.label;
+  el.className = 'market-status ' + (status.open ? 'status-open' : 'status-close');
+  return status;
+}
+
+// ===== 数据格式化 =====
+function fmtMoney(val) {
+  if (val == null || isNaN(val)) return '--';
+  const abs = Math.abs(val);
+  if (abs >= 1e8) return (val / 1e8).toFixed(2) + '亿';
+  if (abs >= 1e4) return (val / 1e4).toFixed(2) + '万';
+  return val.toFixed(0);
+}
+
+function fmtPct(val) {
+  if (val == null || isNaN(val)) return '--';
+  return (val > 0 ? '+' : '') + val.toFixed(2) + '%';
+}
+
+function cls(val) {
+  if (val == null) return '';
+  return val > 0 ? 'up' : val < 0 ? 'down' : '';
+}
+
+// ===== API 请求 =====
+async function fetchSectorFlow() {
+  const url = `${API_BASE}?pn=1&pz=50&po=1&np=1&fltt=2&invt=2&fid=f62&fs=m:90+t:2&fields=${FIELDS}`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  if (!data.data || !data.data.diff) throw new Error('数据获取失败');
+  return data.data.diff.map(item => ({
+    code: item.f12,
+    name: item.f14,
+    price: item.f2,
+    pct: item.f3,
+    mainNet: item.f62 || 0,       // 主力净流入
+    superLarge: item.f66 || 0,    // 超大单
+    large: item.f69 || 0,          // 大单
+    medium: item.f72 || 0,         // 中单
+    small: item.f75 || 0,          // 小单
+    mainRatio: item.f184 || 0,     // 主力净流入占比
+  }));
+}
+
+async function fetchStockFlow() {
+  const url = `${API_BASE}?pn=1&pz=50&po=1&np=1&fltt=2&invt=2&fid=f62&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fields=${FIELDS}`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  if (!data.data || !data.data.diff) throw new Error('数据获取失败');
+  return data.data.diff.map(item => ({
+    code: item.f12,
+    name: item.f14,
+    price: item.f2,
+    pct: item.f3,
+    mainNet: item.f62 || 0,
+    superLarge: item.f66 || 0,
+    large: item.f69 || 0,
+    medium: item.f72 || 0,
+    small: item.f75 || 0,
+    mainRatio: item.f184 || 0,
+  }));
+}
+
+async function fetchMarketOverview() {
+  // 上证指数
+  const shUrl = `${API_BASE}?pn=1&pz=1&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:1+t:2&fields=f2,f3,f4,f6`;
+  const shResp = await fetch(shUrl);
+  const shData = await shResp.json();
+  // A股资金总览
+  const flowUrl = `${API_BASE}?pn=1&pz=1&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fields=f62,f66,f69,f72,f75`;
+  const flowResp = await fetch(flowUrl);
+  const flowData = await flowResp.json();
+
+  return {
+    shIndex: shData?.data?.diff?.[0]?.f2 || null,
+    shPct: shData?.data?.diff?.[0]?.f3 || null,
+  };
+}
+
+async function calcTotalFlow() {
+  // 获取全市场汇总
+  const total = { mainNet: 0, superLarge: 0, large: 0, medium: 0, small: 0 };
+  const pn = 5; // 前5页
+  for (let i = 0; i < pn; i++) {
+    const url = `${API_BASE}?pn=${i+1}&pz=100&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fields=f62,f66,f69,f72,f75`;
+    try {
+      const resp = await fetch(url);
+  const data = await resp.json();
+      (data?.data?.diff || []).forEach(item => {
+        total.mainNet += (item.f62 || 0);
+        total.superLarge += (item.f66 || 0);
+        total.large += (item.f69 || 0);
+        total.medium += (item.f72 || 0);
+        total.small += (item.f75 || 0);
+      });
+    } catch(e) {}
+  }
+  return total;
+}
+
+// ===== 渲染概览卡片 =====
+function renderOverview(totalFlow, stocks) {
+  const ov = document.getElementById('overview');
+
+  // 涨跌家数
+  let upCount = 0, downCount = 0, flatCount = 0;
+  if (stocks && stocks.length > 0) {
+    stocks.forEach(s => {
+      if (s.pct > 0) upCount++;
+      else if (s.pct < 0) downCount++;
+      else flatCount++;
+    });
+  }
+
+  ov.innerHTML = `
+    <div class="ov-card">
+      <div class="ov-label">🏦 机构(超大单)</div>
+      <div class="ov-value ${cls(totalFlow.superLarge)}">${fmtMoney(totalFlow.superLarge)}</div>
+      <div class="ov-sub">单笔≥100万</div>
+    </div>
+    <div class="ov-card">
+      <div class="ov-label">💼 大户(大单)</div>
+      <div class="ov-value ${cls(totalFlow.large)}">${fmtMoney(totalFlow.large)}</div>
+      <div class="ov-sub">20万~100万</div>
+    </div>
+    <div class="ov-card">
+      <div class="ov-label">🔥 主力合计</div>
+      <div class="ov-value ${cls(totalFlow.mainNet)}">${fmtMoney(totalFlow.mainNet)}</div>
+      <div class="ov-sub">机构+大户</div>
+    </div>
+    <div class="ov-card">
+      <div class="ov-label">🧑 中户(中单)</div>
+      <div class="ov-value ${cls(totalFlow.medium)}">${fmtMoney(totalFlow.medium)}</div>
+      <div class="ov-sub">4万~20万</div>
+    </div>
+    <div class="ov-card">
+      <div class="ov-label">👤 散户(小单)</div>
+      <div class="ov-value ${cls(totalFlow.small)}">${fmtMoney(totalFlow.small)}</div>
+      <div class="ov-sub">单笔&lt;4万</div>
+    </div>
+    ${upCount + downCount > 0 ? `
+    <div class="ov-card">
+      <div class="ov-label">📊 涨跌家数</div>
+      <div class="ov-value"><span class="up">${upCount}</span> / <span class="down">${downCount}</span> / ${flatCount}</div>
+      <div class="ov-sub">涨 / 跌 / 平</div>
+    </div>` : ''}
+  `;
+}
+
+// ===== 缓存当前列表数据用于点击 =====
+let currentListData = [];
+
+// ===== 渲染列表 =====
+function renderList(data) {
+  const container = document.getElementById('listContainer');
+
+  if (!data || data.length === 0) {
+    container.innerHTML = '<div class="empty">暂无数据</div>';
+    currentListData = [];
+    return;
+  }
+
+  const list = data.slice(0, 30);
+  currentListData = list;
+
+  container.innerHTML = list.map((item, i) => `
+    <div class="list-item" data-idx="${i}">
+      <div class="item-rank ${i < 3 ? 'rank-'+(i+1) : ''}">${i + 1}</div>
+      <div class="item-info">
+        <div class="item-name">${item.name}</div>
+        <div class="item-code">${item.code}</div>
+      </div>
+      <div class="item-pct ${cls(item.pct)}">${fmtPct(item.pct)}</div>
+      <div class="item-main ${cls(item.mainNet)}">${fmtMoney(item.mainNet)}</div>
+      <div class="item-detail ${cls(item.superLarge)}">${fmtMoney(item.superLarge)}</div>
+    </div>
+  `).join('');
+
+  // 用事件委托绑定点击
+  container.querySelectorAll('.list-item').forEach(el => {
+    el.addEventListener('click', function() {
+      const idx = parseInt(this.dataset.idx);
+      if (!isNaN(idx) && currentListData[idx]) {
+        showDetail(currentListData[idx]);
+      }
+    });
+  });
+}
+
+// ===== 详情弹窗 =====
+function showDetail(item) {
+  const sheet = document.getElementById('detailSheet');
+  sheet.innerHTML = `
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">${item.name}</div>
+    <div class="sheet-code">${item.code}  ${item.price ? '¥' + item.price.toFixed(2) : ''}  ${fmtPct(item.pct)}</div>
+    <div class="flow-grid">
+      <div class="flow-item">
+        <div class="flow-label">🏦 主力净流入</div>
+        <div class="flow-value ${cls(item.mainNet)}">${fmtMoney(item.mainNet)}</div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-label">📊 主力占比</div>
+        <div class="flow-value">${item.mainRatio ? item.mainRatio.toFixed(1) + '%' : '--'}</div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-label">🔴 超大单净流入</div>
+        <div class="flow-value ${cls(item.superLarge)}">${fmtMoney(item.superLarge)}</div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-label">🟠 大单净流入</div>
+        <div class="flow-value ${cls(item.large)}">${fmtMoney(item.large)}</div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-label">🟡 中单净流入</div>
+        <div class="flow-value ${cls(item.medium)}">${fmtMoney(item.medium)}</div>
+      </div>
+      <div class="flow-item">
+        <div class="flow-label">🟢 小单净流入</div>
+        <div class="flow-value ${cls(item.small)}">${fmtMoney(item.small)}</div>
+      </div>
+    </div>
+    <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.03);border-radius:10px;font-size:0.75rem;color:var(--sub);line-height:1.6;">
+      💡 <b>怎么看：</b><br>
+      超大单+大单 = 主力资金<br>
+      主力净流入 > 0 → 机构在买<br>
+      主力净流入 < 0 → 机构在跑<br>
+      主力买、散户卖 → 看涨信号<br>
+      主力卖、散户买 → 谨慎
+    </div>
+  `;
+  document.getElementById('detailOverlay').classList.remove('hidden');
+}
+
+function closeDetail() {
+  document.getElementById('detailOverlay').classList.add('hidden');
+}
+
+// ===== Tab 切换 =====
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  const searchWrap = document.getElementById('searchWrap');
+  searchWrap.classList.toggle('hidden', tab !== 'stock');
+
+  if (tab === 'sector') {
+    renderList(sectorData);
+  } else {
+    renderList(searchResults.length > 0 ? searchResults : stockData);
+  }
+}
+
+// ===== 搜索 =====
+function onSearch() {
+  const kw = document.getElementById('searchInput').value.trim().toLowerCase();
+  const clearBtn = document.getElementById('searchClear');
+  clearBtn.style.display = kw ? 'block' : 'none';
+
+  if (!kw) {
+    searchResults = [];
+    renderList(stockData);
+    return;
+  }
+  searchResults = stockData.filter(item =>
+    item.name.toLowerCase().includes(kw) ||
+    String(item.code).includes(kw)
+  );
+  renderList(searchResults);
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchClear').style.display = 'none';
+  searchResults = [];
+  renderList(stockData);
+}
+
+// ===== 刷新 =====
+async function refreshAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  const container = document.getElementById('listContainer');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div>加载中...</div>';
+
+  updateMarketStatus();
+
+  try {
+    // 串行请求，避免被东方财富限流
+    const sectors = await fetchSectorFlow();
+    const stocks = await fetchStockFlow();
+
+    sectorData = sectors;
+    stockData = stocks;
+    searchResults = [];
+
+    // 用板块数据汇总全市场资金流向
+    const summary = { mainNet: 0, superLarge: 0, large: 0, medium: 0, small: 0 };
+    sectors.forEach(s => {
+      summary.mainNet += s.mainNet;
+      summary.superLarge += s.superLarge;
+      summary.large += s.large;
+      summary.medium += s.medium;
+      summary.small += s.small;
+    });
+    renderOverview(summary, stocks);
+
+    // 渲染列表
+    if (currentTab === 'sector') renderList(sectorData);
+    else renderList(stockData);
+
+    // 更新时间
+    lastUpdate = new Date();
+    document.getElementById('updateTime').textContent = '更新时间：' + lastUpdate.toLocaleTimeString();
+    document.getElementById('updateLabel').textContent = '刚刚更新';
+  } catch (e) {
+    container.innerHTML = `<div class="error-msg">加载失败：${e.message}<br>可能是请求太频繁，等几秒再试<br><button class="btn btn-primary" style="margin-top:12px;" onclick="refreshAll()">🔄 重试</button></div>`;
+    document.getElementById('updateLabel').textContent = '加载失败';
+  } finally {
+    btn.classList.remove('spinning');
+  }
+
+  // 定时刷新：盘中每60秒自动刷
+  scheduleAutoRefresh();
+}
+
+let autoRefreshTimer = null;
+function scheduleAutoRefresh() {
+  clearTimeout(autoRefreshTimer);
+  const status = getMarketStatus();
+  if (status.open) {
+    autoRefreshTimer = setTimeout(() => {
+      refreshAll();
+    }, 60000);
+  }
+}
+
+// ===== 初始化 =====
+function init() {
+  updateMarketStatus();
+  refreshAll();
+}
+
+init();
+</script>
+</body>
+</html>
