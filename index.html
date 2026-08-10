@@ -135,9 +135,10 @@
       border-bottom: 1px solid rgba(255,255,255,0.05);
     }
     .sort-bar span:nth-child(1) { flex: 1; }
-    .sort-bar span:nth-child(2) { width: 55px; text-align: right; }
-    .sort-bar span:nth-child(3) { width: 75px; text-align: right; }
+    .sort-bar span:nth-child(2) { width: 52px; text-align: right; }
+    .sort-bar span:nth-child(3) { width: 70px; text-align: right; }
     .sort-bar span:nth-child(4) { width: 70px; text-align: right; }
+    .sort-bar span:nth-child(5) { width: 72px; text-align: right; }
 
     /* ===== 列表 ===== */
     .list-container { padding: 0 16px; }
@@ -177,22 +178,30 @@
     }
 
     .item-pct {
-      width: 55px;
+      width: 52px;
       text-align: right;
       font-size: 0.85rem;
       font-weight: 600;
     }
-    .item-main {
-      width: 75px;
+    .item-main-in {
+      width: 70px;
+      text-align: right;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--red);
+    }
+    .item-main-out {
+      width: 70px;
+      text-align: right;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--green);
+    }
+    .item-main-net {
+      width: 72px;
       text-align: right;
       font-size: 0.82rem;
       font-weight: 600;
-    }
-    .item-detail {
-      width: 70px;
-      text-align: right;
-      font-size: 0.68rem;
-      color: var(--sub);
     }
 
     .up   { color: var(--red); }
@@ -352,8 +361,9 @@
   <div class="sort-bar">
     <span>名称</span>
     <span>涨跌</span>
-    <span>主力净流入</span>
-    <span>超大单</span>
+    <span>主力流入</span>
+    <span>主力流出</span>
+    <span>主力净</span>
   </div>
 
   <!-- 搜索（个股模式下显示） -->
@@ -423,12 +433,15 @@ async function cachedFetch(url, cacheKey) {
   throw lastErr;
 }
 
-// 字段映射
-// f2=现价 f3=涨跌幅 f12=代码 f14=名称
-// f62=主力净流入 f66=超大单净流入 f69=大单净流入
-// f72=中单净流入 f75=小单净流入 f78=中户净流入 f81=散户净流入
+// ===== 字段映射（已验证：2026-08-10）=====
+// 每组 (n-2, n-1, n) = (流入, 流出, 净流入)
+// f62 = 主力净流入 = f66 + f72（超大单净 + 大单净）
+// f64=超大单流入, f65=超大单流出, f66=超大单净流入
+// f70=大单流入,   f71=大单流出,   f72=大单净流入
+// f76=中单流入,   f77=中单流出,   f78=中单净流入
+// f82=小单流入,   f83=小单流出,   f84=小单净流入
 // f184=主力净流入占比
-const FIELDS = 'f2,f3,f12,f14,f62,f66,f69,f72,f75,f184';
+const FIELDS = 'f2,f3,f12,f14,f62,f64,f65,f66,f70,f71,f72,f76,f77,f78,f82,f83,f84,f184';
 
 // ===== 市场状态 =====
 function getMarketStatus() {
@@ -482,12 +495,25 @@ async function fetchSectorFlow() {
     name: item.f14,
     price: item.f2,
     pct: item.f3,
-    mainNet: item.f62 || 0,       // 主力净流入
-    superLarge: item.f66 || 0,    // 超大单
-    large: item.f69 || 0,          // 大单
-    medium: item.f72 || 0,         // 中单
-    small: item.f75 || 0,          // 小单
-    mainRatio: item.f184 || 0,     // 主力净流入占比
+    // 主力流入 = 超大单流入 + 大单流入
+    mainIn: (item.f64 || 0) + (item.f70 || 0),
+    // 主力流出 = 超大单流出 + 大单流出
+    mainOut: (item.f65 || 0) + (item.f71 || 0),
+    // 主力净流入 = 超大单净 + 大单净
+    mainNet: item.f62 || 0,
+    superLargeIn:  item.f64 || 0,
+    superLargeOut: item.f65 || 0,
+    superLargeNet: item.f66 || 0,
+    largeIn:  item.f70 || 0,
+    largeOut: item.f71 || 0,
+    largeNet: item.f72 || 0,
+    mediumIn:  item.f76 || 0,
+    mediumOut: item.f77 || 0,
+    mediumNet: item.f78 || 0,
+    smallIn:  item.f82 || 0,
+    smallOut: item.f83 || 0,
+    smallNet: item.f84 || 0,
+    mainRatio: item.f184 || 0,
   }));
 }
 
@@ -500,11 +526,21 @@ async function fetchStockFlow() {
     name: item.f14,
     price: item.f2,
     pct: item.f3,
+    mainIn: (item.f64 || 0) + (item.f70 || 0),
+    mainOut: (item.f65 || 0) + (item.f71 || 0),
     mainNet: item.f62 || 0,
-    superLarge: item.f66 || 0,
-    large: item.f69 || 0,
-    medium: item.f72 || 0,
-    small: item.f75 || 0,
+    superLargeIn:  item.f64 || 0,
+    superLargeOut: item.f65 || 0,
+    superLargeNet: item.f66 || 0,
+    largeIn:  item.f70 || 0,
+    largeOut: item.f71 || 0,
+    largeNet: item.f72 || 0,
+    mediumIn:  item.f76 || 0,
+    mediumOut: item.f77 || 0,
+    mediumNet: item.f78 || 0,
+    smallIn:  item.f82 || 0,
+    smallOut: item.f83 || 0,
+    smallNet: item.f84 || 0,
     mainRatio: item.f184 || 0,
   }));
 }
@@ -515,7 +551,7 @@ async function fetchMarketOverview() {
   const shResp = await fetch(shUrl);
   const shData = await shResp.json();
   // A股资金总览
-  const flowUrl = `${API_BASE}?pn=1&pz=1&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fields=f62,f66,f69,f72,f75`;
+  const flowUrl = `${API_BASE}?pn=1&pz=1&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fields=f62,f64,f65,f66,f70,f71,f72,f76,f77,f78,f82,f83,f84`;
   const flowResp = await fetch(flowUrl);
   const flowData = await flowResp.json();
 
@@ -526,20 +562,22 @@ async function fetchMarketOverview() {
 }
 
 async function calcTotalFlow() {
-  // 获取全市场汇总
-  const total = { mainNet: 0, superLarge: 0, large: 0, medium: 0, small: 0 };
-  const pn = 5; // 前5页
+  // 获取全市场汇总（使用修正后的字段映射）
+  const total = { mainIn: 0, mainOut: 0, mainNet: 0, superLargeNet: 0, largeNet: 0, mediumNet: 0, smallNet: 0 };
+  const pn = 5;
   for (let i = 0; i < pn; i++) {
-    const url = `${API_BASE}?pn=${i+1}&pz=100&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fields=f62,f66,f69,f72,f75`;
+    const url = `${API_BASE}?pn=${i+1}&pz=100&po=0&np=1&fltt=2&invt=2&fid=f3&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fields=f62,f64,f65,f66,f70,f71,f72,f76,f77,f78,f82,f83,f84`;
     try {
       const resp = await fetch(url);
-  const data = await resp.json();
+      const data = await resp.json();
       (data?.data?.diff || []).forEach(item => {
+        total.mainIn += (item.f64 || 0) + (item.f70 || 0);
+        total.mainOut += (item.f65 || 0) + (item.f71 || 0);
         total.mainNet += (item.f62 || 0);
-        total.superLarge += (item.f66 || 0);
-        total.large += (item.f69 || 0);
-        total.medium += (item.f72 || 0);
-        total.small += (item.f75 || 0);
+        total.superLargeNet += (item.f66 || 0);
+        total.largeNet += (item.f72 || 0);
+        total.mediumNet += (item.f78 || 0);
+        total.smallNet += (item.f84 || 0);
       });
     } catch(e) {}
   }
@@ -562,28 +600,38 @@ function renderOverview(totalFlow, stocks) {
 
   ov.innerHTML = `
     <div class="ov-card">
-      <div class="ov-label">🏦 机构(超大单)</div>
-      <div class="ov-value ${cls(totalFlow.superLarge)}">${fmtMoney(totalFlow.superLarge)}</div>
+      <div class="ov-label">📈 主力流入</div>
+      <div class="ov-value up">${fmtMoney(totalFlow.mainIn)}</div>
+      <div class="ov-sub">超大单+大单</div>
+    </div>
+    <div class="ov-card">
+      <div class="ov-label">📉 主力流出</div>
+      <div class="ov-value down">${fmtMoney(totalFlow.mainOut)}</div>
+      <div class="ov-sub">超大单+大单</div>
+    </div>
+    <div class="ov-card">
+      <div class="ov-label">🔥 主力净流入</div>
+      <div class="ov-value ${cls(totalFlow.mainNet)}">${fmtMoney(totalFlow.mainNet)}</div>
+      <div class="ov-sub">流入−流出</div>
+    </div>
+    <div class="ov-card">
+      <div class="ov-label">🏦 超大单净</div>
+      <div class="ov-value ${cls(totalFlow.superLargeNet)}">${fmtMoney(totalFlow.superLargeNet)}</div>
       <div class="ov-sub">单笔≥100万</div>
     </div>
     <div class="ov-card">
-      <div class="ov-label">💼 大户(大单)</div>
-      <div class="ov-value ${cls(totalFlow.large)}">${fmtMoney(totalFlow.large)}</div>
+      <div class="ov-label">💼 大单净</div>
+      <div class="ov-value ${cls(totalFlow.largeNet)}">${fmtMoney(totalFlow.largeNet)}</div>
       <div class="ov-sub">20万~100万</div>
     </div>
     <div class="ov-card">
-      <div class="ov-label">🔥 主力合计</div>
-      <div class="ov-value ${cls(totalFlow.mainNet)}">${fmtMoney(totalFlow.mainNet)}</div>
-      <div class="ov-sub">机构+大户</div>
-    </div>
-    <div class="ov-card">
-      <div class="ov-label">🧑 中户(中单)</div>
-      <div class="ov-value ${cls(totalFlow.medium)}">${fmtMoney(totalFlow.medium)}</div>
+      <div class="ov-label">🧑 中单净</div>
+      <div class="ov-value ${cls(totalFlow.mediumNet)}">${fmtMoney(totalFlow.mediumNet)}</div>
       <div class="ov-sub">4万~20万</div>
     </div>
     <div class="ov-card">
-      <div class="ov-label">👤 散户(小单)</div>
-      <div class="ov-value ${cls(totalFlow.small)}">${fmtMoney(totalFlow.small)}</div>
+      <div class="ov-label">👤 小单净</div>
+      <div class="ov-value ${cls(totalFlow.smallNet)}">${fmtMoney(totalFlow.smallNet)}</div>
       <div class="ov-sub">单笔&lt;4万</div>
     </div>
     ${upCount + downCount > 0 ? `
@@ -619,8 +667,9 @@ function renderList(data) {
         <div class="item-code">${item.code}</div>
       </div>
       <div class="item-pct ${cls(item.pct)}">${fmtPct(item.pct)}</div>
-      <div class="item-main ${cls(item.mainNet)}">${fmtMoney(item.mainNet)}</div>
-      <div class="item-detail ${cls(item.superLarge)}">${fmtMoney(item.superLarge)}</div>
+      <div class="item-main-in">${fmtMoney(item.mainIn)}</div>
+      <div class="item-main-out">${fmtMoney(item.mainOut)}</div>
+      <div class="item-main-net ${cls(item.mainNet)}">${fmtMoney(item.mainNet)}</div>
     </div>
   `).join('');
 
@@ -643,36 +692,41 @@ function showDetail(item) {
     <div class="sheet-title">${item.name}</div>
     <div class="sheet-code">${item.code}  ${item.price ? '¥' + item.price.toFixed(2) : ''}  ${fmtPct(item.pct)}</div>
     <div class="flow-grid">
-      <div class="flow-item">
-        <div class="flow-label">🏦 主力净流入</div>
+      <div class="flow-item full">
+        <div class="flow-label">🔥 主力净流入</div>
         <div class="flow-value ${cls(item.mainNet)}">${fmtMoney(item.mainNet)}</div>
+        <div style="font-size:0.7rem;color:var(--sub);margin-top:2px;">流入 ${fmtMoney(item.mainIn)} ｜ 流出 ${fmtMoney(item.mainOut)}</div>
       </div>
       <div class="flow-item">
         <div class="flow-label">📊 主力占比</div>
         <div class="flow-value">${item.mainRatio ? item.mainRatio.toFixed(1) + '%' : '--'}</div>
       </div>
       <div class="flow-item">
-        <div class="flow-label">🔴 超大单净流入</div>
-        <div class="flow-value ${cls(item.superLarge)}">${fmtMoney(item.superLarge)}</div>
+        <div class="flow-label">🏦 超大单</div>
+        <div class="flow-value ${cls(item.superLargeNet)}">${fmtMoney(item.superLargeNet)}</div>
+        <div style="font-size:0.7rem;color:var(--sub);">入${fmtMoney(item.superLargeIn)} 出${fmtMoney(item.superLargeOut)}</div>
       </div>
       <div class="flow-item">
-        <div class="flow-label">🟠 大单净流入</div>
-        <div class="flow-value ${cls(item.large)}">${fmtMoney(item.large)}</div>
+        <div class="flow-label">💼 大单</div>
+        <div class="flow-value ${cls(item.largeNet)}">${fmtMoney(item.largeNet)}</div>
+        <div style="font-size:0.7rem;color:var(--sub);">入${fmtMoney(item.largeIn)} 出${fmtMoney(item.largeOut)}</div>
       </div>
       <div class="flow-item">
-        <div class="flow-label">🟡 中单净流入</div>
-        <div class="flow-value ${cls(item.medium)}">${fmtMoney(item.medium)}</div>
+        <div class="flow-label">🧑 中单</div>
+        <div class="flow-value ${cls(item.mediumNet)}">${fmtMoney(item.mediumNet)}</div>
+        <div style="font-size:0.7rem;color:var(--sub);">入${fmtMoney(item.mediumIn)} 出${fmtMoney(item.mediumOut)}</div>
       </div>
       <div class="flow-item">
-        <div class="flow-label">🟢 小单净流入</div>
-        <div class="flow-value ${cls(item.small)}">${fmtMoney(item.small)}</div>
+        <div class="flow-label">👤 小单</div>
+        <div class="flow-value ${cls(item.smallNet)}">${fmtMoney(item.smallNet)}</div>
+        <div style="font-size:0.7rem;color:var(--sub);">入${fmtMoney(item.smallIn)} 出${fmtMoney(item.smallOut)}</div>
       </div>
     </div>
     <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.03);border-radius:10px;font-size:0.75rem;color:var(--sub);line-height:1.6;">
       💡 <b>怎么看：</b><br>
-      超大单+大单 = 主力资金<br>
-      主力净流入 > 0 → 机构在买<br>
-      主力净流入 < 0 → 机构在跑<br>
+      主力 = 超大单 + 大单<br>
+      主力流入 > 主力流出 → 净流入（机构在买）<br>
+      主力流入 < 主力流出 → 净流出（机构在跑）<br>
       主力买、散户卖 → 看涨信号<br>
       主力卖、散户买 → 谨慎
     </div>
@@ -742,13 +796,15 @@ async function refreshAll() {
     searchResults = [];
 
     // 用板块数据汇总全市场资金流向
-    const summary = { mainNet: 0, superLarge: 0, large: 0, medium: 0, small: 0 };
+    const summary = { mainIn: 0, mainOut: 0, mainNet: 0, superLargeNet: 0, largeNet: 0, mediumNet: 0, smallNet: 0 };
     sectors.forEach(s => {
+      summary.mainIn += s.mainIn;
+      summary.mainOut += s.mainOut;
       summary.mainNet += s.mainNet;
-      summary.superLarge += s.superLarge;
-      summary.large += s.large;
-      summary.medium += s.medium;
-      summary.small += s.small;
+      summary.superLargeNet += s.superLargeNet;
+      summary.largeNet += s.largeNet;
+      summary.mediumNet += s.mediumNet;
+      summary.smallNet += s.smallNet;
     });
     renderOverview(summary, stocks);
 
